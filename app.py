@@ -32,27 +32,60 @@ def submit_initial_data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Endpoint 2: Generar cálculos actuariales
+# Endpoint: Generar cálculos actuariales
 @app.route('/generate-actuarial-calculations', methods=['POST'])
 def generate_actuarial_calculations():
     try:
-        # Leer datos iniciales
-        input_file = os.path.join(GENERATED_FILES_DIR, "datos_iniciales.json")
-        if not os.path.exists(input_file):
-            return jsonify({"error": "Datos iniciales no encontrados"}), 404
-
-        # Procesar los cálculos actuariales (simulado)
-        result = [
-            {"concepto": "Cálculo 1", "resultado": 150000},
-            {"concepto": "Cálculo 2", "resultado": 75000}
-        ]
-
-        # Guardar los cálculos en un archivo Excel
-        file_path = os.path.join(GENERATED_FILES_DIR, "calculos_actuariales.xlsx")
-        df = pd.DataFrame(result)
+        # Leer datos proporcionados en la solicitud
+        data = request.json
+        
+        # Validar que los datos necesarios estén presentes
+        required_fields = ["normativa", "empresa", "ejercicio", "saldos"]
+        missing_fields = [field for field in required_fields if field not in data]
+        if missing_fields:
+            return jsonify({"error": f"Faltan los siguientes campos: {', '.join(missing_fields)}"}), 400
+        
+        normativa = data["normativa"]
+        empresa = data["empresa"]
+        ejercicio = data["ejercicio"]
+        saldos = data["saldos"]
+        
+        if "jubilacion" not in saldos or "desahucio" not in saldos:
+            return jsonify({"error": "Los saldos deben incluir 'jubilacion' y 'desahucio'"}), 400
+        
+        saldo_jubilacion = saldos["jubilacion"]
+        saldo_desahucio = saldos["desahucio"]
+        
+        # Procesar las fórmulas actuariales basadas en el modelo (ejemplo básico)
+        tasa_descuento = 0.05  # Ejemplo de tasa de descuento del modelo
+        crecimiento_salarial = 0.03  # Ejemplo de tasa de crecimiento salarial
+        
+        # Cálculos para jubilación patronal
+        reserva_jubilacion = saldo_jubilacion * (1 + tasa_descuento) / (1 - crecimiento_salarial)
+        gasto_jubilacion = reserva_jubilacion - saldo_jubilacion
+        
+        # Cálculos para desahucio
+        reserva_desahucio = saldo_desahucio * (1 + tasa_descuento) / (1 - crecimiento_salarial)
+        gasto_desahucio = reserva_desahucio - saldo_desahucio
+        
+        # Generar archivo Excel con los resultados
+        file_path = os.path.join(GENERATED_FILES_DIR, f"calculos_actuariales_{empresa}_{ejercicio}.xlsx")
+        df = pd.DataFrame({
+            "Concepto": ["Reserva Jubilación Patronal", "Gasto Jubilación Patronal",
+                         "Reserva Desahucio", "Gasto Desahucio"],
+            "Monto": [reserva_jubilacion, gasto_jubilacion, reserva_desahucio, gasto_desahucio],
+            "Normativa": [normativa] * 4,
+            "Ejercicio": [ejercicio] * 4,
+            "Empresa": [empresa] * 4
+        })
         df.to_excel(file_path, index=False)
-
-        return jsonify({"message": "Cálculos actuariales generados", "file": file_path})
+        
+        # Devolver respuesta con enlace al archivo generado
+        return jsonify({
+            "message": "Cálculos actuariales generados correctamente.",
+            "file": file_path
+        })
+    
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
